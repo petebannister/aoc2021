@@ -6,23 +6,16 @@
     "configurations": [
         {
             "name": "Debug",
-            "type": "cppdbg",
+            "type": "cppvsdbg",
             "request": "launch",
             "program": "${workspaceRoot}/zig-out/bin/app.exe",
+            "args": [],
             "cwd": "${workspaceRoot}",
             "valuesFormatting": "parseText",
             "stopAtEntry": false,
             "environment": [],
-            "externalConsole": false,
-            "MIMode": "gdb",
+            "console": "integratedTerminal",
             "preLaunchTask": "build",
-            "setupCommands": [
-                {
-                    "description": "Enable pretty-printing for gdb",
-                    "text": "-enable-pretty-printing",
-                    "ignoreFailures": true
-                }
-            ]
         }
     ]
 }
