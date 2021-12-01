@@ -11,10 +11,13 @@ pub fn build(b: *std.build.Builder) void {
     // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall.
     const mode = b.standardReleaseOptions();
 
-    const exe = b.addExecutable("day01", "src/main.zig");
+    const exe = b.addExecutable("app", "src/main.zig");
     exe.setTarget(target);
     exe.setBuildMode(mode);
     exe.install();
+    
+    //b.installFile("src/input.txt", "bin/input.txt");
+    //file.install();
 
     const run_cmd = exe.run();
     run_cmd.step.dependOn(b.getInstallStep());
