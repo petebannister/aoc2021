@@ -8,15 +8,36 @@ pub fn main() anyerror!void {
     defer file.close();
     var buf: [1024]u8 = undefined;
     const reader = std.io.bufferedReader(file.reader()).reader();
-    var count : i32 = 0;
-    var last: i32 = 0x7fffffff; // to ignore first
+    var part1 : i32 = 0;
+    var part2 : i32 = 0;
+    var index : u32 = 0;
+    var last: i32 = 0;
+    var last_sum: i32 = 0;
+    var window = [3]i32 {0,0,0};
     while (try reader.readUntilDelimiterOrEof(&buf, '\n')) |line| {
         // Parse the line, copy any needed bytes due to shared buffer
         var value = try std.fmt.parseInt(i32, line, 10);
         if (value > last) {
-            count += 1;
+            if (index > 0) {
+                part1 += 1;
+            }
         }
+        window[index % window.len] = value;
         last = value;
+        index += 1;
+        if (index >= window.len) {
+            var sum : i32 = 0;
+            for (window) |v| {
+                sum += v;
+            }
+            if (index > window.len) {
+                if (sum > last_sum) {
+                    part2 += 1;
+                }
+            }
+            last_sum = sum;
+        }
     }
-    try stdout.print("{d}\n", .{count});
+    try stdout.print("part1 {d}\n", .{part1});
+    try stdout.print("part2 {d}\n", .{part2});
 }
