@@ -28,7 +28,7 @@ fn readCommand(reader: anytype) !?Vec2
         var cmd = iter.next() orelse return null;
         var n = try std.fmt.parseInt(i32, iter.next().?, 10);
         
-        std.debug.print("command: {s}", .{cmd});
+        //std.debug.print("command: {s}", .{cmd});
         if (streql(u8, cmd, "forward")) {
             return Vec2{n, 0};
         }
@@ -56,7 +56,7 @@ pub fn main() anyerror!void {
     defer file.close();
     const reader = std.io.bufferedReader(file.reader()).reader();
     while (try readCommand(reader)) |cmd| {
-        try stdout.print("{d}, {d}\n", .{ cmd[0], cmd[1] });
+        //try stdout.print("{d}, {d}\n", .{ cmd[0], cmd[1] });
         pos += cmd;
         aim += cmd[1];
         pos2[0] += cmd[0];
