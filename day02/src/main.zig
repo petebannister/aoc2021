@@ -1,70 +1,72 @@
 const std = @import("std");
 const fs = std.fs;
 const meta = std.meta;
+const assert = std.debug.assert;
 
 const Vec2 = meta.Vector(2, i32);
 
+fn streql(a: []const u8, b: []const u8) bool {
+    return std.mem.eql(u8, a, b);
+}
+fn split(s: []const u8, delim: []const u8) std.mem.SplitIterator(u8) {
+    return std.mem.split(u8, s, delim);
+}
+fn parseI32(s: []const u8) std.fmt.ParseIntError!i32 {
+    return std.fmt.parseInt(i32, s, 10);
+}
 
-// Example test
-// const expect = @import("std").testing.expect;
-// test "if statement" {
-//     const a = true;
-//     var x: u16 = 0;
-//     if (a) {
-//         x += 1;
-//     } else {
-//         x += 2;
-//     }
-//     try expect(x == 1);
-// }
-const CommandError = error{
+const ParseError = error {
     InvalidCommand
 };
-fn readCommand(reader: anytype) !?Vec2
+fn parseLine(reader: anytype) !?Vec2
 {
-    const streql = std.mem.eql;
+    const lut = std.ComptimeStringMap(Vec2, .{
+        .{ "forward", Vec2{1, 0}},
+        .{ "down", Vec2{0, 1}},
+        .{ "up", Vec2{0, -1}}
+    });
     var buf: [1024]u8 = undefined;
     if (try reader.readUntilDelimiterOrEof(&buf, '\n')) |line| {
-        var iter = std.mem.split(u8, line, " ");
+        var iter = split(line, " ");
         var cmd = iter.next() orelse return null;
-        var n = try std.fmt.parseInt(i32, iter.next().?, 10);
-        
-        //std.debug.print("command: {s}", .{cmd});
-        if (streql(u8, cmd, "forward")) {
-            return Vec2{n, 0};
+        var n = try parseI32(iter.next().?);
+        if (lut.get(cmd)) |v| {
+            return v * @splat(2, n);
         }
-        if (streql(u8, cmd, "down")) {
-            return Vec2{0, n};
-        }
-        if (streql(u8, cmd, "up")) {
-            return Vec2{0, -n};
-        }
-        return CommandError.InvalidCommand;
+        return ParseError.InvalidCommand;
     }
     return null;
 }
-
-
-pub fn main() anyerror!void {
-    const stdout = std.io.getStdOut().writer();
-    const fname = "input.txt";
-    var part1 : i32 = 0;
-    var part2 : i32 = 0;
+fn solve(reader : anytype) !void
+{
     var pos = Vec2{ 0, 0 };
     var pos2 = Vec2{ 0, 0 };
     var aim: i32 = 0;
-    var file = try fs.cwd().openFile(fname, fs.File.OpenFlags{ .read = true });
-    defer file.close();
-    const reader = std.io.bufferedReader(file.reader()).reader();
-    while (try readCommand(reader)) |cmd| {
-        //try stdout.print("{d}, {d}\n", .{ cmd[0], cmd[1] });
+    while (try parseLine(reader)) |cmd| {
+        //std.debug.print("{d}, {d}\n", .{ cmd[0], cmd[1] });
         pos += cmd;
         aim += cmd[1];
         pos2[0] += cmd[0];
         pos2[1] += aim * cmd[0];
     }
-    part1 = pos[0] * pos[1];
-    part2 = pos2[0] * pos2[1];
-    try stdout.print("part1 {d}\n", .{part1});
-    try stdout.print("part2 {d}\n", .{part2});
+    var part1 = pos[0] * pos[1];
+    var part2 = pos2[0] * pos2[1];
+    std.debug.print("part1 {d}\n", .{part1});
+    std.debug.print("part2 {d}\n", .{part2});
+    assert(part1 == 2102357);
+    assert(part2 == 2101031224);
 }
+
+pub fn main() anyerror!void {
+    const fname = "input.txt";
+    var file = try fs.cwd().openFile(fname, fs.File.OpenFlags{ .read = true });
+    defer file.close();
+    const reader = std.io.bufferedReader(file.reader()).reader();
+    try solve(reader);
+}
+
+// Example test
+// const expect = @import("std").testing.expect;
+// test "example" {
+//     try expect(1 == 1);
+// }
