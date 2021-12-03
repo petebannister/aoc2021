@@ -3,58 +3,141 @@ const fs = std.fs;
 const meta = std.meta;
 const assert = std.debug.assert;
 
-const Vec2 = meta.Vector(2, i32);
 
-fn streql(a: []const u8, b: []const u8) bool {
-    return std.mem.eql(u8, a, b);
-}
-fn split(s: []const u8, delim: []const u8) std.mem.SplitIterator(u8) {
-    return std.mem.split(u8, s, delim);
-}
-fn parseI32(s: []const u8) std.fmt.ParseIntError!i32 {
-    return std.fmt.parseInt(i32, s, 10);
-}
-
-const ParseError = error {
-    InvalidCommand
+const example = [_]u32{
+    0b00100,
+    0b11110,
+    0b10110,
+    0b10111,
+    0b10101,
+    0b01111,
+    0b00111,
+    0b11100,
+    0b10000,
+    0b11001,
+    0b00010,
+    0b01010,
 };
-fn parseLine(reader: anytype) !?Vec2
+
+fn parseLine(reader: anytype) !?u32
 {
-    const lut = std.ComptimeStringMap(Vec2, .{
-        .{ "forward", Vec2{1, 0}},
-        .{ "down", Vec2{0, 1}},
-        .{ "up", Vec2{0, -1}}
-    });
     var buf: [1024]u8 = undefined;
     if (try reader.readUntilDelimiterOrEof(&buf, '\n')) |line| {
-        var iter = split(line, " ");
-        var cmd = iter.next() orelse return null;
-        var n = try parseI32(iter.next().?);
-        if (lut.get(cmd)) |v| {
-            return v * @splat(2, n);
+        if (line.len > 0) {
+            var value =  try std.fmt.parseUnsigned(u32, line, 2);
+            return value;
         }
-        return ParseError.InvalidCommand;
     }
     return null;
 }
+const one:u32 = 1;
+fn accumulateBits(freq: []u32, value: u32) void {
+    for (freq) |*digit, index| {
+        var bit = (freq.len - 1) - index;
+        var mask:u32  = (one << @truncate(u5,bit));
+        if (0 != (value & mask)) {
+            digit.* += 1;
+        }
+    }
+}
+
+fn mostCommonBits(freq: [] const u32, total: usize) u32 {
+    var result:u32 = 0;
+    for (freq) |value| {
+        result <<= one;
+        if ((value * 2) >= total) {
+            result |= one;
+        }
+    }
+    return result; 
+}
+
+fn leastCommonBits(freq: [] const u32, total: usize) u32 {
+    var result:u32 = 0;
+    for (freq) |value| {
+        result <<= one;
+        if ((value * 2) < total) {
+            result |= one;
+        }
+    }
+    return result;
+}
+fn getRatingValue(numbers: []const u32, alloc: *std.mem.Allocator, comptime nbits: u32, comptime most: bool) !u32 
+{
+    var set = try std.DynamicBitSet.initFull(numbers.len, alloc);
+    defer set.deinit();
+    var bit:u5 = nbits;
+    var rating: u32 = 0;
+    outer: while (bit > 0) {
+        bit -= 1;
+        var mask:u32 = one << (bit);
+        var iter = set.iterator(.{});
+        var freq = std.mem.zeroes([nbits]u32);
+        while (iter.next()) |index| {
+            var val = numbers[index];
+            accumulateBits(&freq, val);
+        }
+        var criteria : u32 = undefined;
+        if (most) {
+            criteria = mostCommonBits(&freq, set.count());
+        }
+        else {
+            criteria = leastCommonBits(&freq, set.count());
+        }
+        iter = set.iterator(.{});
+        while (iter.next()) |index| {
+            var v = numbers[index];
+            if ((v & mask) != (criteria & mask)) {
+                set.unset(index);
+                if (1 == set.count()) {
+                    if (set.iterator(.{}).next()) |index2| {
+                        rating = numbers[index2];
+                        set.unset(index2);
+                        break :outer;
+                    }
+                }
+            }
+        }
+    }
+    return rating;
+}
+fn getO2RatingValue(numbers: []const u32, alloc: *std.mem.Allocator, comptime nbits: u32) !u32
+{
+    return getRatingValue(numbers, alloc, nbits, true);
+} 
+fn getCO2RatingValue(numbers: []const u32, alloc: *std.mem.Allocator, comptime nbits: u32) !u32
+{
+    return getRatingValue(numbers, alloc, nbits, false);
+} 
 fn solve(reader : anytype) !void
 {
-    var pos = Vec2{ 0, 0 };
-    var pos2 = Vec2{ 0, 0 };
-    var aim: i32 = 0;
-    while (try parseLine(reader)) |cmd| {
+    var gpalloc = std.heap.GeneralPurposeAllocator(.{}){};
+    var alloc = &gpalloc.allocator;
+    var freq = std.mem.zeroes([12]u32);
+    var numbers = std.ArrayList(u32).init(alloc);
+    defer numbers.deinit();
+
+    while (try parseLine(reader)) |value| {
         //std.debug.print("{d}, {d}\n", .{ cmd[0], cmd[1] });
-        pos += cmd;
-        aim += cmd[1];
-        pos2[0] += cmd[0];
-        pos2[1] += aim * cmd[0];
+        accumulateBits(&freq, value);
+        try numbers.append(value);
     }
-    var part1 = pos[0] * pos[1];
-    var part2 = pos2[0] * pos2[1];
+
+    var gamma = mostCommonBits(&freq, numbers.items.len);
+    var epsilon = ~gamma & 0xFFF; 
+
+    var o2_rating = try getO2RatingValue(numbers.items, alloc, 12);
+    var co2_rating = try getCO2RatingValue(numbers.items, alloc, 12);
+
+    assert(23 == try getO2RatingValue(&example, alloc, 5));
+    assert(10 == try getCO2RatingValue(&example, alloc, 5));
+
+    var part1: u32 = gamma * epsilon;
+    var part2: u32 = o2_rating * co2_rating;
     std.debug.print("part1 {d}\n", .{part1});
     std.debug.print("part2 {d}\n", .{part2});
-    assert(part1 == 2102357);
-    assert(part2 == 2101031224);
+    assert(part1 == 2954600);
+    assert(part2 == 1662846);
 }
 
 pub fn main() anyerror!void {
@@ -70,3 +153,10 @@ pub fn main() anyerror!void {
 // test "example" {
 //     try expect(1 == 1);
 // }
+
+const expect = @import("std").testing.expect;
+test "example" {
+    const alloc = std.testing.allocator;
+    try expect(23 == try getO2RatingValue(&example, alloc));
+    try expect(10 == try getCO2RatingValue(&example, alloc));
+}
