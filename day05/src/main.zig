@@ -93,6 +93,39 @@ fn addLine(world: *World, line: Line) !void
     // else ignore diagonals
 }
 
+
+
+fn addLineDiagonals(world: *World, line: Line) !void
+{
+    var dx = line[1][0] - line[0][0];
+    var dy = line[1][1] - line[0][1];
+    if (dx > 0) {
+        dx = 1;
+    }
+    if (dx < 0) {
+        dx = -1;
+    }
+
+    if (dy > 0) {
+        dy = 1;
+    }
+    if (dy < 0) {
+        dy = -1;
+    }
+
+    var dp = Point{dx, dy};
+
+    var p1 = line[0];
+    var p2 = line[1];
+    // extend the endpoint for the termination condition
+    p2 += dp;
+    
+    while (p1[0] != p2[0] or p1[1] != p2[1]) : (p1 += dp) {
+
+        try addPoint(world, p1[0], p1[1]);
+    }
+}
+
 fn countOverlaps(world: *World) u32
 {
     var count : u32 = 0;
@@ -114,13 +147,15 @@ fn solve(reader : anytype) !Solution
     const allocator = &arena.allocator;
 
     var world = World.init(allocator);
+    var world2 = World.init(allocator);
     var r = Solution.init();
     while (try parseLine(reader)) |line| {
         try addLine(&world, line);
+        try addLineDiagonals(&world2, line);
     }
 
     r.part1 = countOverlaps(&world);
-    //r.part2 = score(losing);
+    r.part2 = countOverlaps(&world2);
     
     return r;
 }
@@ -141,8 +176,6 @@ pub fn main() anyerror!void {
     
     std.debug.print("part1 {d}\n", .{result.part1});
     std.debug.print("part2 {d}\n", .{result.part2});
-    //assert(result.part1 == 14093);
-    //assert(result.part2 == 17388);
 }
 
 // Example test
