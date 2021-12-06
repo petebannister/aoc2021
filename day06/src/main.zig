@@ -8,12 +8,13 @@ const AocError = error {
 };
 
 const Solution = struct {
-    part1: u32 = 0,
-    part2: u32 = 0,
+    part1: u64 = 0,
+    part2: u64 = 0,
 };
 
+const Number = u64;
 //const Allocator = std.mem.Allocator;
-const Population = meta.Vector(9, u32);
+const Population = meta.Vector(9, Number);
 
 fn parseOne(reader: anytype) !?u8
 {
@@ -25,12 +26,12 @@ fn parseOne(reader: anytype) !?u8
     return null;
 }
 
-fn iterate(p: *Population, n: u32) u32
+fn iterate(p: *Population, n: u32) Number
 {
     var i = n;
     while (i > 0) : (i -= 1) {
         var last = p.*;
-        var next = @shuffle(u32, last, last, meta.Vector(9, i32){1,2,3,4,5,6,7,8,0});
+        var next = @shuffle(Number, last, last, meta.Vector(9, i32){1,2,3,4,5,6,7,8,0});
         next[6] += last[0];
         next[8] = last[0];
         p.* = next;
@@ -45,13 +46,15 @@ fn solve(reader : anytype) !Solution
     //const allocator = &arena.allocator;
 
     var population = std.mem.zeroes(Population);
+    var population2 = std.mem.zeroes(Population);
     var r = Solution{};
     while (try parseOne(reader)) |life| {
         population[life] += 1;
+        population2[life] += 1;
     }
 
     r.part1 = iterate(&population, 80);
-    //r.part2 = countOverlaps(&world2);
+    r.part2 = iterate(&population2, 256);
     
     return r;
 }
