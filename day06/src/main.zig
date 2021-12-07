@@ -44,7 +44,6 @@ fn solve(reader : anytype) !Solution
     //var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     //defer arena.deinit();
     //const allocator = &arena.allocator;
-
     var population = std.mem.zeroes(Population);
     var population2 = std.mem.zeroes(Population);
     var r = Solution{};
