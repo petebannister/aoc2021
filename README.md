@@ -1,6 +1,7 @@
 # aoc2021
-Advent of Code 2021
+Advent of Code 2021 zig solutions
 
+First time using zig!
 
 ## Useful zig related links
 
