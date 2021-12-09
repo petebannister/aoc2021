@@ -45,6 +45,12 @@ fn getPoint(p: Vec2, b: *Bathymetry) ?u8 {
     return b.items.items[@intCast(usize, p[1])].items[@intCast(usize, p[0])];
 }
 
+fn setPoint(p: Vec2, b: *Bathymetry, h: u8) void {
+    if (p[0] < 0 or p[0] >= b.width or p[1] < 0 or p[1] >= b.height) {
+        return;
+    }
+    b.items.items[@intCast(usize, p[1])].items[@intCast(usize, p[0])] = h;
+}
 const dirs = [4]Vec2 {
     Vec2{ -1, 0 }, // left
     Vec2{ 0, -1 }, // up
@@ -77,6 +83,67 @@ fn lowPoints(b: *Bathymetry) u32
     return result;
 }
 
+fn lowPointsVec(b: *Bathymetry, a: *Allocator) !ArrayList(Vec2)
+{
+    var result = ArrayList(Vec2).init(a);
+    var p = Vec2{0, 0};
+    while (p[1] < b.height) : (p[1] += 1) {
+        p[0] = 0;
+        while (p[0] < b.width) : (p[0] += 1) {
+            var h = getPoint(p, b);
+            for (dirs) |dir| {
+                if (getPoint(p + dir, b)) |adj| {
+                    if (adj <= h.?) {
+                        h = null;
+                        break;
+                    }
+                }
+            }
+            if (h) |_| {
+                try result.append(p);
+            }
+        }
+    }
+    return result;
+}
+
+fn basins(b: *Bathymetry) !u32
+{
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    var result: u32 = 0;
+    var low = try lowPointsVec(b, &arena.allocator);
+    var stack = std.ArrayList(Vec2).init(&arena.allocator);
+    var basin_sizes = std.ArrayList(u32).init(&arena.allocator);
+    for (low.items) |lp| {
+        var basin_size : u32 = 0;
+        try stack.append(lp);
+        while (stack.items.len > 0) {
+            var p = stack.pop();
+            if (getPoint(p, b)) |h| {
+                if (h < 9) {
+                    basin_size += 1;
+                    // mark done - avoids visited set
+                    setPoint(p, b, 10);
+                    
+                    for (dirs) |dir| {
+                        var p2 = p + dir;
+                        if (getPoint(p2, b)) |adj| {
+                            if (adj < 9) {
+                                try stack.append(p2);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        try basin_sizes.append(basin_size);
+    }
+    std.sort.sort(u32, basin_sizes.items, {}, comptime std.sort.desc(u32));
+    result = basin_sizes.items[0]*basin_sizes.items[1]*basin_sizes.items[2];
+    return result;
+}
+
 fn solve(reader : anytype) !Solution
 {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
@@ -90,7 +157,7 @@ fn solve(reader : anytype) !Solution
 
     var r = Solution{
         .part1 = lowPoints(&bathy),
-        .part2 = 0,
+        .part2 = try basins(&bathy),
     };
     
     return r;
