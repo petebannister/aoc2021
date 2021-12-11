@@ -127,7 +127,14 @@ fn part1(world: *World) u32
 
 fn part2(world: *World) u32
 {
-    _ = world;
+    var step : u32 = 0;
+    var n = world.height * world.width;
+    while (true) : (step += 1) {
+        preStep(world);
+        if (n == flashReset(world)) {
+            return step;
+        }
+    }
     return 0;
 }
 fn solve(reader : anytype) !Solution
@@ -143,7 +150,7 @@ fn solve(reader : anytype) !Solution
 
     var r = Solution{
         .part1 = part1(&world),
-        .part2 = part2(&world),
+        .part2 = part2(&world) + 101, // HACK!
     };
     
     return r;
