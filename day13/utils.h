@@ -22,34 +22,6 @@
 #define nominmax
 #include <Windows.h>
 
-#if 0
-#include "num.hpp"
-
-
-inline bool operator==(int32_t lhs, Num const& rhs) {
-    return (rhs == Num(lhs));
-}
-inline bool operator==(int64_t lhs, Num const& rhs) {
-    return (rhs == Num(lhs));
-}
-inline bool operator!=(int32_t lhs, Num const& rhs) {
-    return (rhs != Num(lhs));
-}
-inline bool operator!=(int64_t lhs, Num const& rhs) {
-    return (rhs != Num(lhs));
-}
-inline bool operator<=(int64_t lhs, Num const& rhs) {
-    return (rhs > Num(lhs));
-}
-
-inline std::ostream& operator<<(std::ostream& o, Num const& num) {
-    o << num.toString();
-    return o;
-}
-#endif
-
-
-
 static double const PI = 3.14159265358979323846264338327950288;
 
 template <typename T>
