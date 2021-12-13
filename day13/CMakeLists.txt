@@ -4,6 +4,7 @@ set(CMAKE_CXX_STANDARD 17)
 add_executable(aoc 
 	"${CMAKE_CURRENT_LIST_DIR}/main.cpp" 
 	"${CMAKE_CURRENT_LIST_DIR}/utils.h"
+	"${CMAKE_CURRENT_LIST_DIR}/utils_stringview.h"
 	)
 target_compile_definitions(aoc PUBLIC -D_SECURE_SCL=0)
 target_include_directories(aoc PUBLIC ${CMAKE_CURRENT_LIST_DIR})

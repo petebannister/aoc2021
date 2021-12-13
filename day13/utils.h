@@ -18,15 +18,111 @@
 #include <unordered_map>
 #include <vector>
 
-#define WIN32_LEAN_AND_MEAN
-#define nominmax
-#include <Windows.h>
+#include "utils_stringview.h"
 
 static double const PI = 3.14159265358979323846264338327950288;
 
 template <typename T>
 void print(T v) {
     std::cout << v << std::endl;
+}
+
+
+//-----------------------------------------------------------------------------
+inline std::string FileReadAll(char const* name) {
+    std::ifstream fs(name, std::ios::binary);
+    std::ostringstream ss;
+    ss << fs.rdbuf();
+    return ss.str();
+}
+
+class TextFileIn;
+class TextFileLines;
+class TextFileLineIterator;
+
+//-----------------------------------------------------------------------------
+class TextFileLines
+{
+    TextFileIn* f_;
+public:
+    TextFileLines(TextFileIn* f)
+        : f_(f)
+    {}
+    TextFileLineIterator begin() const;
+    TextFileLineIterator end() const;
+};
+
+//-----------------------------------------------------------------------------
+class TextFileIn {
+    std::ifstream f_;
+    std::string line_;
+public:
+    TextFileIn(char const* fname)
+        : f_(fname)
+    {
+        if (!f_) {
+            throw std::runtime_error(std::string("Could not open ") + fname);
+        }
+    }
+    void rewind() {
+        f_.seekg(0);
+    }
+
+    bool readLine(StringView& sv) {
+        if (std::getline(f_, line_)) {
+            sv = StringView(line_);
+            return true;
+        }
+        sv = {};
+        return false;
+    }
+
+    TextFileLines lines() {
+        return TextFileLines(this);
+    }
+};
+
+//-----------------------------------------------------------------------------
+class TextFileLineIterator
+{
+    TextFileIn* f_;
+    StringView sv_;
+public:
+    TextFileLineIterator(TextFileIn* f)
+        : f_(f)
+    {
+        next();
+    }
+    TextFileLineIterator()
+        : f_(nullptr)
+    {}
+    bool operator==(TextFileLineIterator const& rhs) const {
+        // Only really care about checking end condition today..
+        return (f_ == nullptr) && (rhs.f_ == nullptr);
+    }
+    bool operator!=(TextFileLineIterator const& rhs) const {
+        // Only really care about checking end condition today..
+        return !(*this == rhs);
+    }
+    StringView operator*() const {
+        return sv_;
+    }
+    TextFileLineIterator& operator++() {
+        next();
+        return *this;
+    }
+    void next() {
+        if (!f_->readLine(sv_)) {
+            f_ = nullptr;
+        }
+    }
+};
+
+inline TextFileLineIterator TextFileLines::begin() const {
+    return TextFileLineIterator(f_);
+}
+inline TextFileLineIterator TextFileLines::end() const {
+    return TextFileLineIterator();
 }
 
 //-----------------------------------------------------------------------------
@@ -96,13 +192,6 @@ inline void tokenize(F func, II i, II e, char const* delimiters, bool process_em
     }
 }
 
-//-----------------------------------------------------------------------------
-inline std::string read_file(char const* name) {
-    std::ifstream fs(name, std::ios::binary);
-    std::ostringstream ss;
-    ss << fs.rdbuf();
-    return ss.str();
-}
 //-----------------------------------------------------------------------------
 inline std::deque<std::string>
 split(std::string const& s, char delimiter) {
@@ -420,30 +509,30 @@ void insert_sorted(C&& c, T&& v) {
     insert_sorted(c, std::forward<T>(v), std::less<T>());
 }
 
-struct point_d {
+struct PointF {
     double x;
     double y;
 
-    bool operator== (point_d const& p) const {
+    bool operator== (PointF const& p) const {
         return (x == p.x) && (y == p.y);
     }
-    bool operator!= (point_d const& p) const {
+    bool operator!= (PointF const& p) const {
         return !(*this == p);
     }
     auto fields() const {
         return std::tie(x, y);
     }
-    bool operator< (point_d const& p) const {
+    bool operator< (PointF const& p) const {
         return (fields() < p.fields());
     }
-    point_d operator-(point_d const& rhs) const {
+    PointF operator-(PointF const& rhs) const {
         return { x - rhs.x, y - rhs.y };
     }
-    point_d operator+(point_d const& rhs) const {
+    PointF operator+(PointF const& rhs) const {
         return { x + rhs.x, y + rhs.y };
     }
-    point_d cw90() const {
-        return point_d{ -y, x };
+    PointF cw90() const {
+        return PointF{ -y, x };
     }
 
     double sqlen() const {
@@ -454,35 +543,35 @@ struct point_d {
     }
 };
 
-struct point {
+struct Point {
     int x = 0;
     int y = 0;
 
-    bool operator== (point const& p) const {
+    bool operator== (Point const& p) const {
         return (x == p.x) && (y == p.y);
     }
-    bool operator!= (point const& p) const {
+    bool operator!= (Point const& p) const {
         return !(*this == p);
     }
     auto fields() const {
         return std::tie(x, y);
     }
-    bool operator< (point const& p) const {
+    bool operator< (Point const& p) const {
         return (fields() < p.fields());
     }
-    point operator-(point const& rhs) const {
+    Point operator-(Point const& rhs) const {
         return { x - rhs.x, y - rhs.y };
     }
-    point operator+(point const& rhs) const {
+    Point operator+(Point const& rhs) const {
         return { x + rhs.x, y + rhs.y };
     }
-    point& operator+=(point const& rhs) {
+    Point& operator+=(Point const& rhs) {
         return (*this = *this + rhs);        
     }
-    point& operator-=(point const& rhs) {
+    Point& operator-=(Point const& rhs) {
         return (*this = *this - rhs);
     }
-    point minimized() const {
+    Point minimized() const {
         if (x == 0) {
             if (y == 0) {
                 return *this;
@@ -500,11 +589,14 @@ struct point {
         }
         return p;
     }
-    point cw90() const {
-        return point{ -y, x };
+    Point cw90() const {
+        return Point{ -y, x };
     }
-    point ccw90() const {
-        return point{ y, -x };
+    Point ccw90() const {
+        return Point{ y, -x };
+    }
+    void swapxy() {
+        std::swap(x, y);
     }
 
     double angle() const {
@@ -520,13 +612,21 @@ struct point {
         return abs(x) + abs(y);
     }
 };
-using points = std::vector<point>;
+using points = std::vector<Point>;
 
-struct bounds {
+struct Bounds {
     num_range<int> x_;
     num_range<int> y_;
 
-    void add(point const& p) {
+    Bounds() {}
+    template <typename Collection>
+    Bounds(Collection const& c) {
+        for (Point const& p : c) {
+            add(p);
+        }
+    }
+
+    void add(Point const& p) {
         if (x_.empty()) {
             x_.start_ = p.x;
             x_.limit_ = p.x + 1;
@@ -560,13 +660,13 @@ struct bounds {
 template <typename T>
 struct SparseBoard
 {
-    std::map<point, T> m;
-    bounds bounds;
-    T get_def(point p, T def) {
+    std::map<Point, T> m;
+    Bounds bounds;
+    T get_def(Point p, T def) {
         return map_value_or(m, p, def);
     }
     template <typename U>
-    void put(point p, U&& v) {
+    void put(Point p, U&& v) {
         m[p] = static_cast<T>(v);
         bounds.add(p);
     }
@@ -584,104 +684,4 @@ struct SparseBoard
         }
         return n;
     }
-};
-
-
-
-struct Console
-{
-    HANDLE                     hStdOut = 0;
-    CONSOLE_SCREEN_BUFFER_INFO csbi = {};
-    DWORD                      cellCount = 0;
-    COORD                      homeCoords = { 0, 0 };
-    DWORD                      count = 0;
-
-    Console() {
-        hStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
-        if (hStdOut == INVALID_HANDLE_VALUE) raise("console");
-        if (!GetConsoleScreenBufferInfo(hStdOut, &csbi)) raise("console2");
-        cellCount = csbi.dwSize.X * csbi.dwSize.Y;
-
-        clear();
-        showCursor(false);
-    }
-
-    void clear() {
-        /* Fill the entire buffer with spaces */
-        if (!FillConsoleOutputCharacter(
-            hStdOut,
-            (TCHAR)' ',
-            cellCount,
-            homeCoords,
-            &count
-        )) return;
-
-        /* Fill the entire buffer with the current colors and attributes */
-        if (!FillConsoleOutputAttribute(
-            hStdOut,
-            csbi.wAttributes,
-            cellCount,
-            homeCoords,
-            &count
-        )) return;
-    }
-
-    void home() {
-        SetConsoleCursorPosition(hStdOut, homeCoords);
-    }
-
-    void move(point p) {
-        COORD xy;
-        xy.X = p.x;
-        xy.Y = p.y;
-        SetConsoleCursorPosition(hStdOut, xy);
-    }
-
-    void putch(point p, char ch) {
-        move(p);
-        WriteConsoleA(hStdOut, &ch, 1, nullptr, nullptr);
-    }
-    void put(point p, char ch) {
-        putch(p, ch);
-    }
-
-    template <typename...Args>
-    void put(point p, Args&&... args) {
-        puts(p, args_to_string(std::forward<Args>(args)...));
-    }
-    template <typename...Args>
-    void write(point p, Args&&... args) {
-        puts(p, args_to_string(std::forward<Args>(args)...));
-    }
-
-    template <typename...Args>
-    void writeln(point p, Args&&... args) {
-        puts(p, args_to_string(std::forward<Args>(args)...));
-        putch('\n');
-    }
-    void puts(point p, char const* s) {
-        move(p);
-        WriteConsoleA(hStdOut, s, (DWORD)strlen(s), nullptr, nullptr);
-    }
-    void puts(point p, std::string const& s) {
-        move(p);
-        WriteConsoleA(hStdOut, s.c_str(), (DWORD)s.size(), nullptr, nullptr);
-    }
-
-    void title(std::string const& s) {
-        SetConsoleTitleA(s.c_str());
-    }
-
-    void showCursor(bool showFlag)
-    {
-        CONSOLE_CURSOR_INFO     cursorInfo;
-
-        GetConsoleCursorInfo(hStdOut, &cursorInfo);
-        cursorInfo.bVisible = showFlag; // set the cursor visibility
-        SetConsoleCursorInfo(hStdOut, &cursorInfo);
-    }
-    static bool key(int kc) {
-        return (GetAsyncKeyState(kc) & 0x8000);
-    }
-
 };

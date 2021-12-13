@@ -1,19 +1,13 @@
-
-
 #include "utils.h"
 
 struct Origami
 {
-	std::set<point> points;
-	std::vector<point> folds;
-
-	void add(point p) {
-		points.insert(p);
-	}
-
-	void fold(point f) {
-		std::set<point> folded;
-		for (point p : points) {
+	std::set<Point> points;
+	std::vector<Point> folds;
+	
+	void fold(Point f) {
+		std::set<Point> folded;
+		for (Point p : points) {
 			if (f.x != 0) {
 				if (p.x > f.x) {
 					p.x = 2 * f.x - p.x;
@@ -30,13 +24,11 @@ struct Origami
 	}
 
 	void print() {
-		bounds b;
-		for (auto&& p : points) add(p);
-		b.print_f([&](point p) {
+		Bounds bounds(points);
+		bounds.print_f([&](Point p) {
 			return contains(points, p) ? '#' : ' '; });
 	}
 };
-
 
 uint32_t part1(Origami& origami) 
 {
@@ -54,30 +46,25 @@ void part2(Origami& origami)
 }
 
 void solveFile(char const* fname) {
-	// Load graph
-	std::string line;
-	std::ifstream fs(fname);
-	if (!fs) {
-		throw std::runtime_error(fname);
-	}
+	// Parse
+	TextFileIn f(fname);
 	Origami origami;
-	while (std::getline(fs, line)) {
+	for (auto line : f.lines()) {
 		if (line.empty()) {
 			break;
 		}
-		auto parts = split(line, ",");
-		origami.add({ atoi(parts[0].c_str()), atoi(parts[1].c_str()) });
+		auto x = line.split(',').i32();
+		auto y = line.i32();
+		origami.points.insert({ x, y });
 	}
-	while (std::getline(fs, line)) {
-		auto fold_along = "fold along";
-		line.erase(0, 11);
-		auto parts = split(line, "=");
-		if (parts[0][0] == 'x') {
-			origami.folds.push_back({ atoi(parts[1].c_str()), 0 });
+	for (auto line : f.lines()) {		
+		line = line.mid(11); // "fold along "
+		auto d = line.split('=');
+		auto fold = Point{ line.i32(), 0 };
+		if (d.startsWith('y')) {
+			fold.swapxy();
 		}
-		else { 
-			origami.folds.push_back({ 0, atoi(parts[1].c_str()) }); 
-		}		
+		origami.folds.push_back(fold); 
 	}
 
 	print(part1(origami));
