@@ -1,9 +1,6 @@
 #include "utils.h"
 
-
 using namespace std;
-using Bond = pair<char, char>;
-using Counts = map<char, uint64_t>;
 
 struct Elem {
     uint8_t risk = 0;
