@@ -81,6 +81,46 @@ struct Packet
         }
         return sum;
     }
+    uint64_t operatorSum() const {
+        uint64_t r = 0;
+        switch (id) {
+        case 0: // sum
+            for (auto&& p : sub) {
+                r += p.operatorSum();
+            }
+            return r;
+        case 1: // product
+            r = 1;
+            for (auto&& p : sub) {
+                r *= p.operatorSum();
+            }
+            return r;
+        case 2: // min
+            r = sub[0].operatorSum();
+            for (auto&& p : sub) {
+                amin(r, p.operatorSum());
+            }
+            return r;
+        case 3: // max
+            r = sub[0].operatorSum();
+            for (auto&& p : sub) {
+                amax(r, p.operatorSum());
+            }
+            return r;
+        case 4: // literal
+            return value;
+        case 5: // greater
+            r = (sub[0].operatorSum() > sub[1].operatorSum()) ? 1 : 0;
+            return r;
+        case 6: // less
+            r = (sub[0].operatorSum() < sub[1].operatorSum()) ? 1 : 0;
+            return r;
+        case 7: // equal
+            r = (sub[0].operatorSum() == sub[1].operatorSum()) ? 1 : 0;
+            return r;
+        }
+        return r;
+    }
 };
 
 void solveFile(char const* fname) {
@@ -90,6 +130,7 @@ void solveFile(char const* fname) {
         Packet pkt;
         pkt.parse(bits.begin(), bits.end());
         print(pkt.versionSum());
+        print(pkt.operatorSum());
     }
     // must be more than 654
 }
