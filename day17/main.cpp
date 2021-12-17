@@ -22,7 +22,7 @@ void solveFile(char const* fname) {
     int32_t besth = 0;
 
 
-
+    std::set<Point> distinct;
 
     for (auto init_vx : integers(xmax + 1)) {
         auto vx = init_vx;
@@ -31,12 +31,12 @@ void solveFile(char const* fname) {
         while (px <= xmax) {
             if (px >= xmin) {
 
-                int32_t init_vy = 0;
+                int32_t init_vy = ymin;
                 while (1) {
                     int32_t top = 0;
                     int32_t vy = init_vy;
                     auto py = 0;
-                    for (auto step : integers(steps + 1)) {
+                    for (auto step : integers(steps)) {
                         py += vy;
                         vy -= 1;
                         amax(top, py);
@@ -48,6 +48,7 @@ void solveFile(char const* fname) {
                                 bestx = init_vx;
                                 bestx = init_vy;
                             }
+                            distinct.insert({ init_vx, init_vy });
                         }
                         if (vx != 0) {
                             break;
@@ -80,6 +81,7 @@ void solveFile(char const* fname) {
     }
     
     print(besth);
+    print(distinct.size());
 }
 
 void main() {
