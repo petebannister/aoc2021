@@ -62,6 +62,9 @@ void solveFile(char const* fname) {
                             }
                         }
                     }
+                    // The Y position will always return to 0 exactly - so if 
+                    // the velocity exceeds ymin then there will not be a hit today.
+                    // 
                     if (init_vy > (-ymin + 1)) {
                         break;
                     }
