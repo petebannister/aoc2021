@@ -183,10 +183,26 @@ Node* parse(StringView s) {
     return root;
 }
 
+uint32_t additionSum(StringView a, StringView b)
+{
+    auto* na = parse(a);
+    auto* nb = parse(b);
+
+    auto* addition = new Node;
+    addition->a = na;
+    addition->b = nb;
+    na->parent = addition;
+    nb->parent = addition;
+    addition->reduce();
+    return addition->magnitude();
+}
+
 void solveFile(char const* fname) {
     TextFileIn f(fname);
     Node* addition = nullptr;
+    vector<string> lines;
     for (auto line : f.lines()) {
+        lines.push_back(line.toString());
         if (!addition) {
             addition = parse(line);
         }
@@ -205,6 +221,18 @@ void solveFile(char const* fname) {
     addition->reduce();
     auto s = addition->toString();
     print(addition->magnitude());
+
+    uint32_t highest = 0;
+    for (auto i : integers(lines.size())) {
+        for (auto k : integers(lines.size())) {
+            if (k != i) {
+                amax(highest, additionSum(lines[i].c_str(), lines[k].c_str()));
+                amax(highest, additionSum(lines[k].c_str(), lines[i].c_str()));
+            }
+        }
+    }
+    print(highest);
+
 }
 
 void main() {
