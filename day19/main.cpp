@@ -33,15 +33,23 @@ struct Vec3 {
             y - rhs.y,
             z - rhs.z };
     }
+    Vec3 operator- () const {
+        return Vec3{
+            -x,
+            -y,
+            -z };
+    }
     Vec3& operator+= (Vec3 const& rhs) {
         x += rhs.x;
         y += rhs.y;
         z += rhs.z;
+        return *this;
     }
     Vec3& operator-= (Vec3 const& rhs) {
         x -= rhs.x;
         y -= rhs.y;
         z -= rhs.z;
+        return *this;
     }
     Coord& operator[](size_t i) {
         return v[i];
@@ -144,14 +152,101 @@ std::vector<Rotation> BuildRotations() {
 
 static const std::vector<Rotation> rotations = BuildRotations();
 
+using Points = std::unordered_set<Vec3, Vec3Hash>;
 struct Scan {
-    std::unordered_set<Vec3, Vec3Hash> points;
+    Points points;
 };
+
+using Scans = std::vector<Scan>;
+
+struct Transform {
+    uint32_t from;
+    uint32_t to;
+    Vec3 to_p;
+    Vec3 from_p;
+    Rotation rot;
+};
+using Matches = std::vector<Transform>;
+bool MatchingPair(uint32_t to, uint32_t from, Scans const& scans, Transform& m)
+{
+    std::vector<Transform> result;
+    auto& to_scan = scans[to];
+    auto& from_scan = scans[from];
+    for (auto& to_p : to_scan.points) {
+        for (auto& from_p : from_scan.points) {
+            for (auto& rot : rotations) {
+                int nmatch = 0;
+                for (Vec3 p : from_scan.points) {
+                    p -= from_p;
+                    p = rot * p;
+                    p += to_p;
+                    if (contains(to_scan.points, p)) {
+                        ++nmatch;
+                        if (nmatch >= 12) {
+                            m.to_p = to_p;
+                            m.from_p = from_p;
+                            m.rot = rot;
+                            m.to = to;
+                            m.from = from;
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return false;
+}
+
+
+struct Joiner
+{
+    Points world;
+    set<uint32_t> visited;
+    deque<Transform> chain;
+    void join(Scans const& scans) {
+        world = scans[0].points;
+        visited = { 0 };
+        join(0, scans);
+    }
+    void join(uint32_t to, Scans const& scans) {
+        auto& to_scan = scans[to];
+        for (auto from : integers(scans.size())) {
+            if (!contains(visited, uint32_t(from))) {
+                Transform m;
+                if (MatchingPair(to, from, scans, m)) {
+                    visited.insert(from);
+                    chain.push_front(m);
+                    insert(scans[from]);
+                    join(from, scans);
+                    chain.pop_front();
+                }
+            }
+        }
+    }
+    void insert(Scan const& scan) {
+        for (Vec3 p : scan.points) {
+            for (auto& m : chain) {
+                p -= m.from_p;
+                p = m.rot * p;
+                p += m.to_p;
+            }
+            world.insert(p);
+        }
+    }
+};
+
+Points
+BuildWorld(Scans const& scans) {
+    Joiner j;
+    j.join(scans);
+    return j.world;
+}
 
 void solveFile(char const* fname) {
     TextFileIn f(fname);
 
-    std::vector<Scan> scans;
+    Scans scans;
     scans.reserve(64);
 
     for (auto line : f.lines()) {
@@ -166,7 +261,8 @@ void solveFile(char const* fname) {
             scans.back().points.insert(p);
         }
     }
-    print(0);
+    auto points = BuildWorld(scans);
+    print(points.size());
 }
 
 void main() {
