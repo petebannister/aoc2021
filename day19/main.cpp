@@ -1,5 +1,7 @@
 #include "utils.h"
 
+#include <future>
+
 using namespace std;
 
 using Coord = int32_t;
@@ -20,6 +22,9 @@ struct Vec3 {
             (uint64_t(y) << 48) +
             (uint64_t(z));
         return std::hash<uint64_t>()(v);
+    }
+    uint32_t manhattan() const {
+        return abs(x) + abs(y) + abs(z);
     }
     Vec3& operator+ (Vec3 const& rhs) const {
         return Vec3{ 
@@ -95,8 +100,8 @@ struct Rotation
 {
     static void r90(Coord& x, Coord& y) {
         auto t = x;
-        x = -y;
-        y = t;
+x = -y;
+y = t;
     }
     static void r180(Coord& x, Coord& y) {
         x = -x;
@@ -155,6 +160,7 @@ static const std::vector<Rotation> rotations = BuildRotations();
 using Points = std::unordered_set<Vec3, Vec3Hash>;
 struct Scan {
     Points points;
+    vector<Vec3> vec;
 };
 
 using Scans = std::vector<Scan>;
@@ -165,6 +171,13 @@ struct Transform {
     Vec3 to_p;
     Vec3 from_p;
     Rotation rot;
+
+    Vec3 operator*(Vec3 v) const {
+        v -= from_p;
+        v = rot * v;
+        v += to_p;
+        return v;
+    }
 };
 using Matches = std::vector<Transform>;
 bool MatchingPair(uint32_t to, uint32_t from, Scans const& scans, Transform& m)
@@ -173,23 +186,26 @@ bool MatchingPair(uint32_t to, uint32_t from, Scans const& scans, Transform& m)
     auto& to_scan = scans[to];
     auto& from_scan = scans[from];
     for (auto& to_p : to_scan.points) {
-        for (auto& from_p : from_scan.points) {
+        for (auto& from_p : from_scan.vec) {
             for (auto& rot : rotations) {
                 int nmatch = 0;
-                for (Vec3 p : from_scan.points) {
-                    p -= from_p;
-                    p = rot * p;
-                    p += to_p;
+                int rem = (int)from_scan.vec.size();
+                for (Vec3 p : from_scan.vec) {
+                    m.to_p = to_p;
+                    m.from_p = from_p;
+                    m.rot = rot;
+                    p = m * p;
                     if (contains(to_scan.points, p)) {
                         ++nmatch;
                         if (nmatch >= 12) {
-                            m.to_p = to_p;
-                            m.from_p = from_p;
-                            m.rot = rot;
                             m.to = to;
                             m.from = from;
                             return true;
                         }
+                    }
+                    --rem;
+                    if ((nmatch + rem) < 12) {
+                        break;
                     }
                 }
             }
@@ -204,35 +220,71 @@ struct Joiner
     Points world;
     set<uint32_t> visited;
     deque<Transform> chain;
+    vector<Vec3> scanners;
     void join(Scans const& scans) {
         world = scans[0].points;
         visited = { 0 };
+        scanners.resize(scans.size());
         join(0, scans);
     }
     void join(uint32_t to, Scans const& scans) {
+        vector<future<pair<bool, Transform>>> futures;
+        vector<Transform> matches;
         auto& to_scan = scans[to];
         for (auto from : integers(scans.size())) {
             if (!contains(visited, uint32_t(from))) {
-                Transform m;
-                if (MatchingPair(to, from, scans, m)) {
-                    visited.insert(from);
-                    chain.push_front(m);
-                    insert(scans[from]);
-                    join(from, scans);
-                    chain.pop_front();
-                }
+                futures.push_back(std::async(std::launch::async, [&scans,to,from] {
+
+                    Transform m;
+                    if (MatchingPair(to, from, scans, m)) {
+                        return pair(true, m);
+                    }
+                    return pair(false, m);
+                }));
             }
         }
+        for (auto&& f : futures) {
+            f.wait();
+            auto [ok, trans] = f.get();
+            if (ok) {
+                matches.push_back(trans);
+            }
+        }
+        for (auto&& m : matches) {
+            visited.insert(m.from);
+        }
+        for (auto&& m : matches) {
+            visited.insert(m.from);
+            chain.push_front(m);
+            insert(m.from, scans[m.from]);
+            join(m.from, scans);
+            chain.pop_front();
+        }
     }
-    void insert(Scan const& scan) {
+    void insert(uint32_t iscan, Scan const& scan) {
+        Vec3 scanner = Vec3{ 0,0,0 };
+        for (auto& m : chain) {
+            scanner = m * scanner;
+        }
+        scanners[iscan] = scanner;
+
         for (Vec3 p : scan.points) {
             for (auto& m : chain) {
-                p -= m.from_p;
-                p = m.rot * p;
-                p += m.to_p;
+                p = m * p;
             }
             world.insert(p);
         }
+    }
+
+    uint32_t largestScannerDist() {
+        uint32_t r = 0;
+        for (auto i : integers(scanners.size())) {
+            for (auto k : integers(i + 1, scanners.size())) {
+                auto d = scanners[i] - scanners[k];
+                amax(r, d.manhattan());
+            }
+        }
+        return r;
     }
 };
 
@@ -259,10 +311,13 @@ void solveFile(char const* fname) {
             p.y = line.split(',').parseInt32();
             p.z = line.parseInt32();
             scans.back().points.insert(p);
+            scans.back().vec.push_back(p);
         }
     }
-    auto points = BuildWorld(scans);
-    print(points.size());
+    Joiner j;
+    j.join(scans);
+    print(j.world.size());
+    print(j.largestScannerDist());
 }
 
 void main() {
