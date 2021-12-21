@@ -4,9 +4,9 @@
 
 using namespace std;
 
-struct DiracDice {
-    uint64_t a;
-    uint64_t b;
+struct SimpleDice {
+    uint64_t a = 0u;
+    uint64_t b = 0u;
 
     uint64_t rolls = 0u;
     uint64_t score_a = 0u;
@@ -47,26 +47,146 @@ struct DiracDice {
     }
 };
 
+
+using Positions = std::pair<uint8_t, uint8_t>;
+using Scores = std::pair<uint8_t, uint8_t>;
+
+struct Key {
+    Scores scores; // remaining scores
+    Positions pos;
+    bool turn;
+    uint32_t memo() const {
+        uint32_t v = scores.first;
+        v <<= 8;
+        v += scores.second;
+        v <<= 8;
+        v += pos.first;
+        v <<= 8;
+        v += pos.second;
+        if (turn) {
+            v |= 0x80000000uL;
+        }
+        return v;
+    }
+    bool operator ==(Key const& rhs) const {
+        return (memo() == rhs.memo());
+    }
+    bool operator !=(Key const& rhs) const {
+        return (memo() != rhs.memo());
+    }
+};
+using Wins = std::pair<uint64_t, uint64_t>;
+using WinsMap = unordered_map<Key, Wins>;
+
+namespace std {
+    template <>
+    struct hash<Key> {
+        size_t operator()(Key const& k) const {
+            return std::hash<uint32_t>()(k.memo());
+        }
+    };
+}
+
+struct DiracDice {
+
+    Positions start;
+    WinsMap map;
+
+    // each of roll splits universe into 3 giving 27 outcomes per 3 rolls (3 * 3 * 3).
+    static constexpr uint8_t OUTCOMES = 27;
+    uint8_t lut[10][OUTCOMES];
+
+    static uint8_t next(uint8_t pos, uint8_t dice) {
+        return (pos + (dice)) % 10;
+    }
+
+    DiracDice() {
+        for (auto p : integers(10)) {
+            auto d = 0u;
+            for (auto a : integers(3)) {
+                for (auto b : integers(3)) {
+                    for (auto c : integers(3)) {
+                        auto roll = a + b + c + 3;
+                        lut[p][d++] = (p + roll) % 10;
+                    }
+                }
+            }
+        }
+    }
+
+    Wins winsForRemainingScore(Scores scores, Positions pos, bool turn) {
+        auto key = Key{ scores, pos, turn };
+        auto i = map.find(key);
+        if (i != map.end()) {
+            return i->second;
+        }
+        Wins wins = { 0u, 0u };
+        for (auto d : integers(OUTCOMES)) {
+            // Array of players may have been better..
+            if (turn) {
+                // player2's turn
+                auto p2 = lut[pos.second][d];
+                auto s2 = p2 + 1;
+                if (s2 >= scores.second) {
+                    ++wins.second;
+                }
+                else {
+                    // did not win
+                    auto r = winsForRemainingScore({ scores.first, scores.second - s2 }, { pos.first, p2 }, !turn);
+                    wins.first += r.first;
+                    wins.second += r.second;
+                }
+            }
+            else {
+                // player 1
+                auto p1 = lut[pos.first][d];
+                auto s1 = p1 + 1;
+                if (s1 >= scores.first) {
+                    ++wins.first;
+                }
+                else {
+                    auto r = winsForRemainingScore({ scores.first - s1, scores.second }, { p1, pos.second }, !turn);
+                    wins.first += r.first;
+                    wins.second += r.second;
+                }
+            }
+        }
+        map.insert(pair(key, wins));
+        return wins;
+    }
+
+    Wins playUntil(uint8_t score) {
+        return winsForRemainingScore({ score, score }, start, false);
+    }
+};
+
+
 void solveFile(char const* fname) {
     TextFileIn f(fname);
 
-    DiracDice start;
+    Positions start;
 
     StringView sv;
     f.readLine(sv);
     sv.split(':');
     sv.pop_front();
-    start.a = sv.parseInt32() - 1;
+    start.first = sv.parseInt32() - 1;
 
     f.readLine(sv);
     sv.split(':');
     sv.pop_front();
-    start.b = sv.parseInt32() - 1;
+    start.second = sv.parseInt32() - 1;
 
-    auto game = start;
-    game.playUntil(1000);
-    print(game.losingScore() * game.rolls);
-    print(0);
+    SimpleDice simple;
+    simple.a = start.first;
+    simple.b = start.second;
+    simple.playUntil(1000);
+    print(simple.losingScore() * simple.rolls);
+
+    DiracDice dirac;
+    dirac.start = start;
+    auto wins = dirac.playUntil(21);
+    print(max(wins.first, wins.second));
 }
 
 void main() {
