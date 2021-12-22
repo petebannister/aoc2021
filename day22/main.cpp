@@ -37,7 +37,6 @@ struct Cube {
             a_[0].contains(other[0]) &&
             a_[1].contains(other[1]) &&
             a_[2].contains(other[2]));
-
     }
     uint64_t size() const {
         return uint64_t(a_[0].size()) * uint64_t(a_[1].size()) * uint64_t(a_[2].size());
