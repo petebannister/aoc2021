@@ -10,4 +10,5 @@ target_compile_definitions(aoc PUBLIC -D_SECURE_SCL=0)
 target_include_directories(aoc PUBLIC ${CMAKE_CURRENT_LIST_DIR})
 
 configure_file("${CMAKE_CURRENT_LIST_DIR}/example.txt" "${CMAKE_BINARY_DIR}/"  COPYONLY)
+configure_file("${CMAKE_CURRENT_LIST_DIR}/example2.txt" "${CMAKE_BINARY_DIR}/"  COPYONLY)
 configure_file("${CMAKE_CURRENT_LIST_DIR}/input.txt" "${CMAKE_BINARY_DIR}/"  COPYONLY)

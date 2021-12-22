@@ -316,8 +316,8 @@ struct num_range {
             return !(*this == r);
         }
     };
-    T start_;
-    T limit_;
+    T start_ = 0;
+    T limit_ = 0;
     iterator begin() const {
         return iterator{ start_ };
     }
@@ -329,6 +329,9 @@ struct num_range {
     }
     bool intersects(self const& other) const {
         return ((other.start_ < limit_) && (other.limit_ > start_));
+    }
+    bool contains(self const& other) const {
+        return ((other.start_ >= start_) && (other.limit_ <= limit_));
     }
     T size() const {
         return (limit_ - start_);
