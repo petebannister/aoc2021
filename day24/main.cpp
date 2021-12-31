@@ -36,7 +36,8 @@ struct ModelNumber {
 
 enum class Op
 {
-    lit, inp, add, mul, div, mod, eql
+    lit, inp, add, mul, div, mod, eql,
+    neq
 };
 
 // Inclusive range
@@ -76,23 +77,32 @@ struct AstNode
         case Op::div: return toStringBinary("/");
         case Op::mod: return toStringBinary("%");
         case Op::eql: return toStringBinary("==");
+        case Op::neq: return toStringBinary("!=");
         default:
             throw logic_error("tostring case");
         }
     }
-
-    int64_t calc() const {
+    int64_t calc_i(ModelNumber const& m) const {
         switch (op) {
         case Op::lit: return value;
-        case Op::inp: throw std::runtime_error("need input");
-        case Op::add: return a->calc() + b->calc();
-        case Op::mul: return a->calc() * b->calc();
-        case Op::div: return a->calc() / b->calc();
-        case Op::mod: return a->calc() % b->calc();
-        case Op::eql: return (a->calc() == b->calc()) ? 1 : 0;
+        case Op::inp: return m[value];
+        case Op::add: return a->calc(m) + b->calc(m);
+        case Op::mul: return a->calc(m) * b->calc(m);
+        case Op::div: return a->calc(m) / b->calc(m);
+        case Op::mod: return a->calc(m) % b->calc(m);
+        case Op::eql: return (a->calc(m) == b->calc(m)) ? 1 : 0;
+        case Op::neq: return (a->calc(m) != b->calc(m)) ? 1 : 0;
         default:
             throw logic_error("calc case");
         }
+    }
+    int64_t calc(ModelNumber const& m) const {
+        auto v = calc_i(m);
+        return v;
+    }
+
+    int64_t calc() const {
+        return calc(0);
     }
     void updateRange() {
         switch (op) {
@@ -108,9 +118,14 @@ struct AstNode
             range.max += b->range.max;
             break;
         case Op::mul:
-            range = a->range;
-            range.min *= b->range.min;
-            range.max *= b->range.max;
+        {
+            auto ra = a->range.min * b->range.min;
+            auto rb = a->range.min * b->range.max;
+            auto rc = a->range.max * b->range.min;
+            auto rd = a->range.max * b->range.max;
+            range.min = min(min(ra, rb), min(rc, rd));
+            range.max = max(max(ra, rb), max(rc, rd));
+        }
             break;
         case Op::div:
             range = a->range;
@@ -120,8 +135,12 @@ struct AstNode
                 //range.max;
             }
             else {
-                range.min /= b->range.max;
-                range.max /= b->range.min;
+                auto ra = a->range.min / b->range.min;
+                auto rb = a->range.min / b->range.max;
+                auto rc = a->range.max / b->range.min;
+                auto rd = a->range.max / b->range.max;
+                range.min = min(min(ra, rb), min(rc, rd));
+                range.max = max(max(ra, rb), max(rc, rd));
             }
             break;
         case Op::mod:
@@ -134,7 +153,30 @@ struct AstNode
             }
             break;
         case Op::eql:
-            range = { 0, 1 };
+            if (a->range.intersects(b->range)) {
+                if ((a->range.size() == 1) && (a->range == b->range)) {
+                    range = { 1, 1 };
+                }
+                else {
+                    range = { 0, 1 };
+                }
+            }
+            else {
+                range = { 0, 0 };
+            }
+            break;
+        case Op::neq:
+            if (a->range.intersects(b->range)) {
+                if ((a->range.size() == 1) && (a->range == b->range)) {
+                    range = { 0, 0 };
+                }
+                else {
+                    range = { 0, 1 };
+                }
+            }
+            else {
+                range = { 1, 1 };
+            }
             break;
         default:
             throw logic_error("updateRange case");
@@ -181,6 +223,42 @@ struct AstNode
         static auto n = alloc(Op::lit, 0);
         return n;
     }
+
+#if 0
+    deque<ModelNumber> solutions(uint64_t expect, ModelNumber m) {
+        deque<ModelNumber> r;
+        switch (op) {
+        case Op::neq:
+            if (b->op == Op::inp) {
+                if (expect == 0) {
+
+                }
+                else {
+
+                }
+            }
+            break;
+        case Op::add:
+            if (a->op == Op::inp) {
+                if (b->op == Op::lit) {
+                    auto v = expect - b->value;
+                    if (v >= 1 && v <= 9) {
+                        m.a[a->value] = expect - b->value;
+                        r.push_back(m);
+                    }
+                    return r;
+                }
+            }
+            break;
+
+        default:
+            break;
+        }
+        //throw runtime_error("solutions: unhandled");
+        return{};
+    }
+#endif
+    
 };
 
 list<AstNode> AstNode::arena;
@@ -253,6 +331,7 @@ struct Stringizer
         case Op::div: return binary(node, "/");
         case Op::mod: return binary(node, "%");
         case Op::eql: return binary(node, "==");
+        case Op::neq: return binary(node, "!=");
         default:
             throw logic_error("toString_i case");
         }
@@ -273,11 +352,23 @@ void AstNode::optimize() {
     a->optimize();
     b->optimize();
     updateRange();
+
+    if ((op != Op::lit) && (range.size() == 1)) {
+        setLiteral(range.min);
+        return;
+    }
+
     if (op == Op::eql) {
         if (!a->range.intersects(b->range)) {
             // never equal
             setLiteral(0);
             return;
+        }
+        if ((b->op == Op::lit) && (a->op == Op::eql)) {
+            if (b->value == 0) {
+                *this = *a;
+                op = Op::neq;
+            }
         }
     }
     if (op == Op::mod) {
@@ -286,8 +377,9 @@ void AstNode::optimize() {
             a = da;
             a->updateRange();
         }
-        if (a->range.max < b->value) {
+        else if (a->range.max < b->value) {
             *this = *a;
+            updateRange();
             if (!a) {
                 return;
             }
@@ -347,11 +439,42 @@ void AstNode::optimize() {
             else if (a->range.max < b->value) {
                 *this = *AstNode::zero();
             }
+            else if (a->op == Op::add) {
+                if ((a->a->range.min > b->value) && (a->b->range.max < b->value)) { // Not quite correct - really need to know if a % 26 == 0 and b < 26
+                    a = a->a;
+                    updateRange();
+                }
+            }
+
+            if (a->op == Op::mul && a->b->op == Op::lit) {
+                if (a->b->value == b->value) {
+                    *this = *a->a;
+                }
+            }
+#if 0
+            if (a->op == Op::add) {
+                if (a->a->op == Op::mul && a->b->op == Op::mul) {
+                    if (a->a->b->op == Op::lit && a->b->b->op == Op::lit) {
+                        if (a->a->b->value == b->value && a->b->b->value == b->value) {
+                            auto aa = a->a->a;
+                            auto bb = a->b->a;
+                            op = Op::add;
+                            a = aa;
+                            b = bb;
+                            value = 0;
+                            updateRange();
+                        }
+                    }
+                }
+            }
+#endif
         }
         else if (op == Op::add) {
             if (a->op == Op::add && a->b->op == Op::lit) {
-                a->b->value += b->value;
+                auto v = b->value;
+                auto* b2 = alloc(Op::lit, b->value + a->b->value);
                 *this = *a;
+                b = b2;
                 updateRange();
             }
             else if (b->value == 0) {
@@ -419,26 +542,199 @@ AstNode* Decompile(TextFileIn& file) {
 }
 
 
+struct Checker {
+    using T = int64_t;
+    ModelNumber num_;
+    uint8_t ipos = 0;
+    T w = {};
+    T x = {};
+    T y = {};
+    T z = {};
+    bool fail = false;
+
+    void inp(T& r) {
+        r = num_[ipos++];
+        if (r == 0) {
+            fail = true;
+            //throw logic_error("inp");
+        }
+    }
+    void add(T& a, T const& b) {
+        a = a + b;
+    }
+    void mul(T& a, T const& b) {
+        a = a * b;
+    }
+    void div(T& a, T const& b) {
+        if (b == 0) {
+            fail = true;
+            // throw logic_error("div0");
+        }
+        else {
+            a = a / b;
+        }
+    }
+    void mod(T& a, T const& b) {
+        if (a < 0) {
+
+            fail = true;
+            return;
+            //throw logic_error("mod neg");
+        }
+        if (b == 0) {
+            fail = true;
+            return;
+            //throw logic_error("mod div0");
+        }
+        a = a % b;
+    }
+    void eql(T& a, T const& b) {
+        a = (a == b) ? 1 : 0;
+    }
+    T run(ModelNumber num) {
+        num_ = num;
+        return run();
+    }
+    T run() {
+        fail = false;
+        ipos = 0;
+        w = {};
+        x = {};
+        y = {};
+        z = {};
+        // modified input so that the compiler can parse it
+#include "input.h"
+        return z;
+    }
+};
+
+// Specific to the input.. TODO: read from the file.
+int64_t D[] = { 1,  1,  1, 26,  1,  26,  1,  1,  1, 26, 26, 26, 26,  26 };
+int64_t X[] = { 12, 10, 10, -6, 11, -12, 11, 12, 12, -2, -5, -4, -4, -12 };
+int64_t A[] = { 6,  2, 13,  8, 13,   8,  3, 11, 10,  8, 14,  6,  8,   2 };
+
+void iterate(ModelNumber const& m, uint8_t i, int64_t& z, vector<int>& st)
+{
+    auto w = m[i];
+    bool b = (z % 26) + X[i];
+    z /= D[i]; // pop?
+    if (D[i] == 26) {
+        st.pop_back();
+    }
+    if (b != w) {
+        z *= 26;
+        auto v = w + A[i];
+        z += v;
+        st.push_back(v);
+    }
+}
+
+int64_t calc(ModelNumber m)
+{
+    vector<int> st;
+    int64_t z = 0;
+    for (auto i : integers(14)) {
+        iterate(m, i, z, st);
+    }
+    return z;
+}
+
+
+ModelNumber MaxModelNumber()
+{
+    vector<uint8_t> stack;
+    vector<pair<uint8_t, uint8_t>> pairs;
+    for (auto i : integers(uint8_t(14))) {
+        if (D[i] == 26) {
+            pairs.push_back(pair(stack.back(), i));
+            stack.pop_back();
+        }
+        else {
+            stack.push_back(i);
+        }
+    }
+    ModelNumber m;
+    for (auto [a, b] : pairs) {
+        // m[a] + A[a] + X[b] == m[b]
+        auto x = A[a] + X[b];
+        if (x < 0) {
+            m.a[a] = 9;
+            m.a[b] = 9 + x;
+        }
+        else {
+            m.a[b] = 9;
+            m.a[a] = 9 - x;
+        }
+    }
+    return m;
+}
+
+ModelNumber MinModelNumber()
+{
+    vector<uint8_t> stack;
+    vector<pair<uint8_t, uint8_t>> pairs;
+    for (auto i : integers(uint8_t(14))) {
+        if (D[i] == 26) {
+            pairs.push_back(pair(stack.back(), i));
+            stack.pop_back();
+        }
+        else {
+            stack.push_back(i);
+        }
+    }
+    ModelNumber m;
+    for (auto [a, b] : pairs) {
+        // m[a] + A[a] + X[b] == m[b]
+        auto x = A[a] + X[b];
+        if (x > 0) {
+            m.a[a] = 1;
+            m.a[b] = 1 + x;
+        }
+        else {
+            m.a[b] = 1;
+            m.a[a] = 1 - x;
+        }
+    }
+    return m;
+}
+
+
 //-----------------------------------------------------------------------------
 void solveFile(char const* fname) {
     TextFileIn f(fname);
 
+    Checker checker;
+#if 0
     auto* prog = Decompile(f);
     prog->optimize();
 
     Stringizer stringizer;
     print(stringizer.toString(prog));
+    //auto chk1 = checker.run(13579246899999uLL);
+    //auto chk1 = checker.run(11111111111111uLL);
+    auto chk2 = checker.run(99999999999999uLL);
+    auto chk3 =  prog->calc(99999999999999uLL);
+    auto chk4 = prog->calc(62188832885682uLL);
+    auto chk5 = calc(99999999999999uLL);
+    //assert(chk1 == chk2);
+#endif
 
-    uint32_t part1 = 0;
+    //auto sol = prog->solutions(0);
+    uint64_t part1 = MaxModelNumber().value();
+    auto chkp1 = checker.run(part1);
+    //for (auto& s : sol) {
+    //    amax(part1, s.value());
+    //}
     print(part1);
-    uint32_t part2 = 0;
+    uint64_t part2 = MinModelNumber().value();
+    auto chkp2 = checker.run(part2);
     print(part2);
 }
 
 //-----------------------------------------------------------------------------
 void main() {
-    print("example");
-    solveFile("example.txt");
+    //print("example");
+    //solveFile("example.txt");
     print("input");
     solveFile("input.txt");
 }
